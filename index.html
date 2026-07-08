@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cost-Guard Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --border:   #2a2d3a;
+    --accent:   #4f8ef7;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --yellow:   #f59e0b;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --font:     'Segoe UI', system-ui, sans-serif;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font); min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex;
+    align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+  .logo span { color: var(--text); font-weight: 400; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .ws-badge {
+    font-size: 0.75rem; padding: 4px 10px;
+    border-radius: 999px; font-weight: 600;
+    background: #1a2e1a; color: var(--green);
+    border: 1px solid var(--green);
+  }
+  .ws-badge.disconnected {
+    background: #2e1a1a; color: var(--red);
+    border-color: var(--red);
+  }
+  .relay-toggle {
+    padding: 8px 20px; border-radius: 8px;
+    font-weight: 700; font-size: 0.85rem;
+    cursor: pointer; border: none; transition: all 0.2s;
+  }
+  .relay-on  { background: var(--green); color: #fff; }
+  .relay-off { background: var(--red);   color: #fff; }
+  .relay-toggle:hover { opacity: 0.85; transform: scale(1.03); }
+  .relay-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Main Layout ── */
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+
+  /* ── Metric Cards ── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px; margin-bottom: 24px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .card-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+  .card-value { font-size: 1.9rem; font-weight: 700; line-height: 1; }
+  .card-unit  { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+  .card-value.blue   { color: var(--accent); }
+  .card-value.green  { color: var(--green); }
+  .card-value.yellow { color: var(--yellow); }
+  .card-value.red    { color: var(--red); }
+
+  /* ── Alert Banner ── */
+  .alert-banner {
+    display: none; margin-bottom: 20px;
+    padding: 12px 18px; border-radius: 10px;
+    font-weight: 600; font-size: 0.9rem;
+    border-left: 4px solid;
+  }
+  .alert-banner.spike     { background: #2d1f0a; border-color: var(--yellow); color: var(--yellow); }
+  .alert-banner.phantom   { background: #1a1f2d; border-color: var(--accent);  color: var(--accent); }
+  .alert-banner.sustained { background: #2d1a0a; border-color: #f97316;        color: #f97316; }
+  .alert-banner.overload  { background: #2d0a0a; border-color: var(--red);     color: var(--red); }
+  .alert-banner.show      { display: flex; align-items: center; gap: 10px; }
+
+  /* ── Rate Card ── */
+  .rate-row {
+    display: flex; gap: 14px; margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .rate-card {
+    flex: 1; min-width: 200px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .rate-icon { font-size: 2rem; }
+  .rate-info .label { font-size: 0.75rem; color: var(--muted); }
+  .rate-info .value { font-size: 1.3rem; font-weight: 700; color: var(--green); }
+
+  /* ── Chart Section ── */
+  .chart-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 24px;
+  }
+  .chart-header {
+    display: flex; align-items: center;
+    justify-content: space-between; margin-bottom: 16px;
+    flex-wrap: wrap; gap: 10px;
+  }
+  .chart-title { font-weight: 700; font-size: 1rem; }
+  .tab-group { display: flex; gap: 6px; }
+  .tab {
+    padding: 6px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); cursor: pointer; font-size: 0.8rem;
+    transition: all 0.15s;
+  }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .chart-wrapper { position: relative; height: 260px; }
+
+  /* ── Alert Log ── */
+  .alert-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 24px;
+  }
+  .section-header {
+    display: flex; align-items: center;
+    justify-content: space-between; margin-bottom: 14px;
+  }
+  .section-title { font-weight: 700; font-size: 1rem; }
+  .export-btn {
+    padding: 7px 16px; border-radius: 8px;
+    background: transparent; border: 1px solid var(--accent);
+    color: var(--accent); cursor: pointer; font-size: 0.8rem;
+    font-weight: 600; transition: all 0.15s; text-decoration: none;
+    display: inline-block;
+  }
+  .export-btn:hover { background: var(--accent); color: #fff; }
+  .alert-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+  .alert-item {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 10px 14px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .alert-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .dot-spike     { background: var(--yellow); }
+  .dot-phantom   { background: var(--accent); }
+  .dot-sustained { background: #f97316; }
+  .dot-overload  { background: var(--red); }
+  .dot-reset     { background: var(--green); }
+  .alert-time { color: var(--muted); min-width: 140px; }
+  .alert-msg  { color: var(--text); }
+  .no-alerts  { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 20px; }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center; color: var(--muted);
+    font-size: 0.75rem; padding: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .card-value { font-size: 1.5rem; }
+    header { flex-wrap: wrap; gap: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">⚡ Cost-Guard <span>Dashboard</span></div>
+  <div class="header-right">
+    <span class="ws-badge disconnected" id="wsBadge">● CONNECTING</span>
+    <button class="relay-toggle relay-on" id="relayBtn" onclick="toggleRelay()">
+      RELAY: ON
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main>
+
+  <!-- ALERT BANNER -->
+  <div class="alert-banner" id="alertBanner">
+    <span id="alertIcon">⚠️</span>
+    <span id="alertText">No alerts</span>
+  </div>
+
+  <!-- METRIC CARDS -->
+  <div class="metrics-grid">
+    <div class="card">
+      <div class="card-label">Voltage</div>
+      <div class="card-value blue" id="valVrms">--</div>
+      <div class="card-unit">VAC</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Current</div>
+      <div class="card-value blue" id="valIrms">--</div>
+      <div class="card-unit">Amperes</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Power</div>
+      <div class="card-value yellow" id="valWatts">--</div>
+      <div class="card-unit">Watts</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Energy</div>
+      <div class="card-value blue" id="valKwh">--</div>
+      <div class="card-unit">kWh</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Cost</div>
+      <div class="card-value green" id="valCost">--</div>
+      <div class="card-unit">PHP</div>
+    </div>
+  </div>
+
+  <!-- RATE ROW -->
+  <div class="rate-row">
+    <div class="rate-card">
+      <div class="rate-icon">🏷️</div>
+      <div class="rate-info">
+        <div class="label">Meralco Rate</div>
+        <div class="value" id="valRate">-- PHP/kWh</div>
+      </div>
+    </div>
+    <div class="rate-card">
+      <div class="rate-icon">🕐</div>
+      <div class="rate-info">
+        <div class="label">Last Updated</div>
+        <div class="value" style="font-size:1rem" id="valTimestamp">--</div>
+      </div>
+    </div>
+    <div class="rate-card">
+      <div class="rate-icon">🔌</div>
+      <div class="rate-info">
+        <div class="label">Relay Status</div>
+        <div class="value" id="valRelayStatus">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORICAL CHART -->
+  <div class="chart-section">
+    <div class="chart-header">
+      <div class="chart-title">Power Consumption History (W)</div>
+      <div class="tab-group">
+        <button class="tab active" onclick="switchTab('hourly', this)">Hourly</button>
+        <button class="tab" onclick="switchTab('daily', this)">Daily</button>
+        <button class="tab" onclick="switchTab('weekly', this)">Weekly</button>
+      </div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="historyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ALERT LOG + EXPORT -->
+  <div class="alert-section">
+    <div class="section-header">
+      <div class="section-title">⚠️ Alert Log</div>
+      <a class="export-btn" href="/api/alerts" download="alerts.csv">⬇ Export CSV</a>
+    </div>
+    <div class="alert-list" id="alertList">
+      <div class="no-alerts">No alerts yet — system is monitoring...</div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Cost-Guard v3.0 &nbsp;|&nbsp; ESP32 Edge Computing &nbsp;|&nbsp;
+  <span id="footerIp">Loading...</span>
+</footer>
+
+<script>
+// ================================================================
+// WEBSOCKET — live data stream from ESP32
+// ================================================================
+let ws;
+let relayState   = true;
+let alertHistory = [];
+let logData      = [];
+let currentTab   = 'hourly';
+let chart;
+
+function connectWebSocket() {
+  const host = window.location.hostname;
+  ws = new WebSocket('ws://' + host + '/ws');
+
+  ws.onopen = () => {
+    document.getElementById('wsBadge').textContent = '● LIVE';
+    document.getElementById('wsBadge').classList.remove('disconnected');
+    document.getElementById('footerIp').textContent = host;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const d = JSON.parse(event.data);
+      updateMetrics(d);
+    } catch(e) { console.error('WS parse error:', e); }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('wsBadge').textContent = '● OFFLINE';
+    document.getElementById('wsBadge').classList.add('disconnected');
+    // Auto-reconnect after 3 seconds
+    setTimeout(connectWebSocket, 3000);
+  };
+
+  ws.onerror = (e) => { ws.close(); };
+}
+
+// ================================================================
+// UPDATE METRICS from WebSocket data
+// ================================================================
+function updateMetrics(d) {
+  // Metric cards
+  document.getElementById('valVrms').textContent  = d.vrms.toFixed(1);
+  document.getElementById('valIrms').textContent  = d.irms.toFixed(3);
+  document.getElementById('valWatts').textContent = d.watts.toFixed(1);
+  document.getElementById('valKwh').textContent   = d.kwh.toFixed(4);
+  document.getElementById('valCost').textContent  = 'PHP ' + d.cost.toFixed(4);
+  document.getElementById('valRate').textContent  = 'PHP ' + d.rate.toFixed(4) + '/kWh';
+  document.getElementById('valTimestamp').textContent = d.timestamp || '--';
+
+  // Relay status
+  relayState = d.relay;
+  const btn  = document.getElementById('relayBtn');
+  const stat = document.getElementById('valRelayStatus');
+  if (d.tripped) {
+    btn.textContent  = 'TRIPPED — RESET';
+    btn.className    = 'relay-toggle relay-off';
+    stat.textContent = '🔴 TRIPPED';
+    stat.style.color = 'var(--red)';
+  } else if (d.relay) {
+    btn.textContent  = 'RELAY: ON';
+    btn.className    = 'relay-toggle relay-on';
+    stat.textContent = '🟢 ON';
+    stat.style.color = 'var(--green)';
+  } else {
+    btn.textContent  = 'RELAY: OFF';
+    btn.className    = 'relay-toggle relay-off';
+    stat.textContent = '🔴 OFF';
+    stat.style.color = 'var(--red)';
+  }
+
+  // Alert banner
+  showAlertBanner(d.alert, d.alertType);
+}
+
+// ================================================================
+// ALERT BANNER
+// ================================================================
+const ALERT_ICONS = {
+  spike: '⚡', phantom: '👻', sustained: '🔥', overload: '🚨', none: ''
+};
+
+function showAlertBanner(message, type) {
+  const banner = document.getElementById('alertBanner');
+  if (!type || type === 'none' || message === 'None') {
+    banner.classList.remove('show', 'spike', 'phantom', 'sustained', 'overload');
+    return;
+  }
+  banner.className = 'alert-banner show ' + type;
+  document.getElementById('alertIcon').textContent = ALERT_ICONS[type] || '⚠️';
+  document.getElementById('alertText').textContent = message;
+}
+
+// ================================================================
+// RELAY TOGGLE — sends POST to ESP32
+// ================================================================
+async function toggleRelay() {
+  const btn      = document.getElementById('relayBtn');
+  btn.disabled   = true;
+  const newState = !relayState;
+
+  try {
+    const resp = await fetch('/api/relay', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ state: newState })
+    });
+    const data = await resp.json();
+    if (!data.success) throw new Error('Relay command failed');
+  } catch(e) {
+    console.error('Relay error:', e);
+    alert('Could not reach ESP32. Check WiFi connection.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ================================================================
+// HISTORICAL CHART — loads log.csv and renders via Chart.js
+// ================================================================
+function initChart() {
+  const ctx = document.getElementById('historyChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [{
+      label: 'Power (W)',
+      data: [],
+      borderColor: '#4f8ef7',
+      backgroundColor: 'rgba(79,142,247,0.08)',
+      borderWidth: 2,
+      pointRadius: 2,
+      tension: 0.3,
+      fill: true
+    }]},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.parsed.y.toFixed(1) + ' W'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#64748b', maxTicksLimit: 10,
+                   maxRotation: 0, font: { size: 10 } },
+          grid: { color: '#2a2d3a' }
+        },
+        y: {
+          ticks: { color: '#64748b', font: { size: 10 },
+                   callback: v => v + ' W' },
+          grid: { color: '#2a2d3a' }
+        }
+      }
+    }
+  });
+}
+
+async function loadLogData() {
+  try {
+    const resp = await fetch('/api/log');
+    const csv  = await resp.text();
+    const rows = csv.trim().split('\n');
+    // Skip header row
+    logData = rows.slice(1).map(row => {
+      const cols = row.split(',');
+      return {
+        timestamp: cols[0] || '',
+        vrms:  parseFloat(cols[1]) || 0,
+        irms:  parseFloat(cols[2]) || 0,
+        watts: parseFloat(cols[3]) || 0,
+        kwh:   parseFloat(cols[4]) || 0,
+        cost:  parseFloat(cols[5]) || 0,
+        relay: cols[6] === '1',
+        alert: cols[7] || ''
+      };
+    }).filter(r => r.watts >= 0);
+  } catch(e) {
+    console.error('Failed to load log:', e);
+    logData = [];
+  }
+}
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderChart();
+}
+
+function renderChart() {
+  if (!chart || logData.length === 0) return;
+
+  let filtered = [];
+  const now    = new Date();
+
+  if (currentTab === 'hourly') {
+    // Last 60 minutes — all data points
+    const cutoff = new Date(now - 60 * 60 * 1000);
+    filtered = logData.filter(r => new Date(r.timestamp) >= cutoff);
+    // If no timestamp-based data, show last 60 rows
+    if (filtered.length === 0) filtered = logData.slice(-60);
+  } else if (currentTab === 'daily') {
+    // Last 24 hours
+    const cutoff = new Date(now - 24 * 60 * 60 * 1000);
+    filtered = logData.filter(r => new Date(r.timestamp) >= cutoff);
+    if (filtered.length === 0) filtered = logData.slice(-1440);
+  } else if (currentTab === 'weekly') {
+    // Last 7 days — downsample to hourly averages
+    const cutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const allWeek = logData.filter(r => new Date(r.timestamp) >= cutoff);
+    if (allWeek.length === 0) {
+      filtered = logData;
+    } else {
+      // Group into hourly buckets, average watts
+      const buckets = {};
+      allWeek.forEach(r => {
+        const d   = new Date(r.timestamp);
+        const key = d.toISOString().slice(0, 13) + ':00'; // "2026-02-03 14:00"
+        if (!buckets[key]) buckets[key] = { sum: 0, count: 0 };
+        buckets[key].sum += r.watts;
+        buckets[key].count++;
+      });
+      filtered = Object.entries(buckets).map(([ts, v]) => ({
+        timestamp: ts,
+        watts: v.sum / v.count
+      }));
+    }
+  }
+
+  // Format labels
+  const labels = filtered.map(r => {
+    const ts = r.timestamp;
+    if (ts.startsWith('T+')) return ts; // Fallback millis-based
+    const d = new Date(ts);
+    if (currentTab === 'weekly') {
+      return d.toLocaleDateString('en-PH', { month:'short', day:'numeric', hour:'2-digit' });
+    } else if (currentTab === 'daily') {
+      return d.toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit' });
+    } else {
+      return d.toLocaleTimeString('en-PH', { hour:'2-digit', minute:'2-digit' });
+    }
+  });
+
+  chart.data.labels                  = labels;
+  chart.data.datasets[0].data        = filtered.map(r => r.watts);
+  chart.update('none'); // No animation on update for performance
+}
+
+// ================================================================
+// ALERT LOG — loads alerts.csv and renders list
+// ================================================================
+async function loadAlerts() {
+  try {
+    const resp = await fetch('/api/alerts');
+    const csv  = await resp.text();
+    const rows = csv.trim().split('\n').slice(1); // Skip header
+
+    alertHistory = rows.map(row => {
+      const cols = row.split(',');
+      return { timestamp: cols[0], type: cols[1], message: cols[2] };
+    }).filter(r => r.message);
+
+    renderAlerts();
+  } catch(e) {
+    console.error('Failed to load alerts:', e);
+  }
+}
+
+function renderAlerts() {
+  const list = document.getElementById('alertList');
+  if (alertHistory.length === 0) {
+    list.innerHTML = '<div class="no-alerts">No alerts yet — system is monitoring...</div>';
+    return;
+  }
+
+  // Show newest first
+  const reversed = [...alertHistory].reverse().slice(0, 50);
+  list.innerHTML  = reversed.map(a => `
+    <div class="alert-item">
+      <div class="alert-dot dot-${a.type || 'spike'}"></div>
+      <span class="alert-time">${a.timestamp || '--'}</span>
+      <span class="alert-msg">${a.message || '--'}</span>
+    </div>
+  `).join('');
+}
+
+// ================================================================
+// INIT
+// ================================================================
+window.addEventListener('load', async () => {
+  initChart();
+  connectWebSocket();
+
+  // Load historical data
+  await loadLogData();
+  renderChart();
+  await loadAlerts();
+
+  // Refresh historical data every 2 minutes
+  setInterval(async () => {
+    await loadLogData();
+    renderChart();
+    await loadAlerts();
+  }, 120000);
+});
+</script>
+</body>
+</html>
