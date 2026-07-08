@@ -169,3 +169,7 @@ Readings and alerts are logged to LittleFS as rolling CSV files:
 ## 🙏 Acknowledgments
 
 - Live tariff data is powered by [**meralco-ph**](https://github.com/rairulyle/meralco-ph) by [**Lyle Vince Dela Cuesta**](https://github.com/rairulyle) — a REST API and Home Assistant add-on that parses and serves current MERALCO electricity rates in the Philippines. Huge thanks for making this available.
+
+## 📄 License
+
+- This project is licensed under the [MIT License](MITLICENSE.txt).
