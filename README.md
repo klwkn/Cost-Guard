@@ -70,7 +70,8 @@ Install these via the Arduino Library Manager (or PlatformIO):
 - [`EmonLib`](https://github.com/openenergymonitor/EmonLib)
 - [`ArduinoJson`](https://arduinojson.org/) (v6)
 - [`ESPAsyncWebServer`](https://github.com/mathieucarbou/ESPAsyncWebServer) + `AsyncTCP`
-- ESP32 board package (`Preferences`, `LittleFS`, `WiFi`, `HTTPClient` — bundled with Arduino-ESP32 core)
+- [`LittleFS`](https://github.com/earlephilhower/arduino-littlefs-upload) 
+- ESP32 board package (`Preferences`, `WiFi`, `HTTPClient` — bundled with Arduino-ESP32 core)
 
 ---
 
